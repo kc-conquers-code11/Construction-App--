@@ -502,24 +502,56 @@ export const loginWithOTP = async (req, res) => {
     // Create OTP
     const otpRecord = await createOTP(identifier, otpType, 5);
 
-    // Send OTP
-    if (isEmail) {
-      await sendEmailOTP(identifier, otpRecord.otp);
-    } else {
-      await sendSMSOTP(identifier, otpRecord.otp);
+    // Send OTP - always prefer email if available, otherwise try SMS
+    let sendResult = { success: false };
+    
+    if (isEmail || user.email) {
+      // Send via email
+      sendResult = await sendEmailOTP(user.email || identifier, otpRecord.otp);
+      if (sendResult.success) {
+        console.log(`✅ OTP sent via email to ${user.email || identifier}`);
+      } else {
+        console.log(`⚠️ Email failed, attempting SMS...`);
+        // Fallback to SMS
+        if (user.phone) {
+          sendResult = await sendSMSOTP(user.phone, otpRecord.otp);
+        }
+      }
+    } else if (user.phone) {
+      // Send via SMS
+      sendResult = await sendSMSOTP(user.phone, otpRecord.otp);
+      if (sendResult.success) {
+        console.log(`✅ OTP sent via SMS to ${user.phone}`);
+      }
+    }
+
+    // Log OTP for development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('\n🔐 DEBUG - OTP Generated (Development Only):');
+      console.log('=========================================');
+      console.log(`OTP Code: ${otpRecord.otp}`);
+      console.log(`For: ${identifier}`);
+      console.log(`Expires in: 5 minutes`);
+      console.log('=========================================\n');
     }
 
     res.json({
       success: true,
       message: `OTP sent to ${isEmail ? 'email' : 'phone'}`,
-      identifier,
-      expiresIn: '5 minutes',
+      data: {
+        identifier,
+        expiresIn: '5 minutes',
+        sentVia: isEmail ? 'email' : 'sms',
+      },
+      // Only in development - REMOVE IN PRODUCTION
+      ...(process.env.NODE_ENV === 'development' && { otp: otpRecord.otp }),
     });
   } catch (error) {
     console.error('Login with OTP error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to send OTP',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
