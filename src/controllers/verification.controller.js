@@ -6,7 +6,7 @@ import {
   verifyOTP,
   markOTPAsUsed,
 } from '../services/otp.service.js';
-import { sendEmailOTP, sendSMSOTP } from '../services/emailSms.service.js';
+import { sendEmailOTP, sendSMSOTP, sendOTPViaServerless } from '../services/emailSms.service.js';
 
 // Request OTP for email/phone verification
 export const requestOTP = async (req, res) => {
@@ -40,7 +40,8 @@ export const requestOTP = async (req, res) => {
     // Send OTP
     let sendResult;
     if (isEmail) {
-      sendResult = await sendEmailOTP(identifier, otpRecord.otp);
+      // Use serverless email function for faster delivery
+      sendResult = await sendOTPViaServerless(identifier, otpRecord.otp, otpType);
     } else {
       sendResult = await sendSMSOTP(identifier, otpRecord.otp);
     }

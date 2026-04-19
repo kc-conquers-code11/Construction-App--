@@ -10,6 +10,32 @@ export const generateOTP = (length = 6) => {
   return otp;
 };
 
+// Serverless email fallback
+export const sendOTPViaServerless = async (email, otp, type = 'LOGIN') => {
+  try {
+    const apiUrl = process.env.SERVERLESS_EMAIL_API || 'http://localhost:3000/api/send-otp';
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp, type }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('❌ Serverless email failed:', data);
+      return { success: false, error: data.error };
+    }
+
+    console.log('✅ OTP sent via serverless function');
+    return { success: true, messageId: data.messageId };
+  } catch (error) {
+    console.error('❌ Serverless function error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 // Create Gmail transporter
 let gmailTransporter = null;
 
@@ -37,29 +63,27 @@ export const sendEmailOTP = async (email, otp) => {
     const transporter = getGmailTransporter();
 
     if (!transporter) {
-      console.error('❌ Gmail transporter not configured');
-      return {
-        success: false,
-        error: 'Email service not configured. Check SMTP settings.',
-      };
+      console.error('❌ Gmail transporter not configured, using serverless fallback');
+      // Fallback to serverless function
+      return await sendOTPViaServerless(email, otp, 'LOGIN');
     }
 
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #2c3e50; margin-bottom: 10px;">Neev Construction App</h1>
+          <h1 style="color: #2c3e50; margin-bottom: 10px;">🏗️ Construction App</h1>
           <p style="color: #7f8c8d; font-size: 16px;">Your OTP for verification</p>
         </div>
         
         <div style="background: #f8f9fa; border: 2px dashed #dee2e6; padding: 30px; border-radius: 10px; text-align: center; margin: 20px 0;">
-          <h2 style="color: #2c3e50; margin: 0; font-size: 36px; letter-spacing: 10px;">${otp}</h2>
+          <h2 style="color: #2c3e50; margin: 0; font-size: 48px; letter-spacing: 5px;">${otp}</h2>
           <p style="color: #6c757d; margin-top: 10px;">Valid for 10 minutes</p>
         </div>
         
         <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; margin: 20px 0;">
           <p style="margin: 0; color: #856404; font-size: 14px;">
             <strong>⚠️ Security Notice:</strong> Never share this OTP with anyone. 
-            Neev Construction will never ask for your OTP.
+            Construction App will never ask for your OTP.
           </p>
         </div>
         

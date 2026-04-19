@@ -8,7 +8,7 @@ import {
   verifyOTP,
   markOTPAsUsed,
 } from '../services/otp.service.js';
-import { sendEmailOTP, sendSMSOTP } from '../services/emailSms.service.js';
+import { sendEmailOTP, sendSMSOTP, sendOTPViaServerless } from '../services/emailSms.service.js';
 
 // Helper to check for secrets
 const getSecret = (key) => {
@@ -502,17 +502,19 @@ export const loginWithOTP = async (req, res) => {
     // Create OTP
     const otpRecord = await createOTP(identifier, otpType, 5);
 
-    // Send OTP - always prefer email if available, otherwise try SMS
+    // Send OTP - prioritize serverless email function
     let sendResult = { success: false };
     
     if (isEmail || user.email) {
-      // Send via email
-      sendResult = await sendEmailOTP(user.email || identifier, otpRecord.otp);
+      // Send via serverless function (faster, no timeout issues)
+      console.log(`📧 Attempting serverless email to ${user.email || identifier}`);
+      sendResult = await sendOTPViaServerless(user.email || identifier, otpRecord.otp, 'LOGIN_OTP');
+      
       if (sendResult.success) {
-        console.log(`✅ OTP sent via email to ${user.email || identifier}`);
+        console.log(`✅ OTP sent via serverless email to ${user.email || identifier}`);
       } else {
-        console.log(`⚠️ Email failed, attempting SMS...`);
-        // Fallback to SMS
+        console.log(`⚠️ Serverless email failed, attempting SMS...`);
+        // Fallback to SMS if serverless fails
         if (user.phone) {
           sendResult = await sendSMSOTP(user.phone, otpRecord.otp);
         }
