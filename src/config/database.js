@@ -1,8 +1,6 @@
 // src/config/database.js
 import pkg from '../../generated/prisma/index.js';
 const { PrismaClient } = pkg;
-import { PrismaPg } from '@prisma/adapter-pg';
-import pg from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -15,22 +13,10 @@ if (!connectionString) {
 
 // Log masked URL for debugging on Vercel
 const maskedUrl = connectionString.replace(/:([^:@]+)@/, ':****@');
-console.log(`🔌 Initializing database with: ${maskedUrl}`);
+console.log(`🔌 Connecting to database with: ${maskedUrl}`);
 
-// Create connection pool
-const pool = new pg.Pool({
-  connectionString,
-  max: 10, // Lower pool size for serverless
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-  ssl: connectionString.includes('sslmode=require') ? { rejectUnauthorized: false } : false
-});
-
-const adapter = new PrismaPg(pool);
-
-// Create Prisma client
+// Create Prisma client with native driver
 const prisma = new PrismaClient({
-  adapter,
   log: ['error', 'warn'],
 });
 
@@ -38,7 +24,6 @@ const prisma = new PrismaClient({
 export const testDatabaseConnection = async () => {
   try {
     await prisma.$connect();
-    // Simple query to verify connection
     await prisma.$queryRaw`SELECT 1`;
     console.log('✅ Database connection successful');
     return true;
@@ -52,7 +37,6 @@ export const testDatabaseConnection = async () => {
 export const disconnectDatabase = async () => {
   try {
     await prisma.$disconnect();
-    await pool.end();
     console.log('Database connections closed');
   } catch (error) {
     console.error('Error closing database connections:', error);
@@ -60,3 +44,4 @@ export const disconnectDatabase = async () => {
 };
 
 export default prisma;
+
