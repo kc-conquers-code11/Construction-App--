@@ -99,11 +99,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 const uploadsPath = path.join(__dirname, '../uploads');
 app.use('/uploads', express.static(uploadsPath));
-console.log('📁 Serving static files from:', uploadsPath);
-
-// Create uploads directory only if not on Vercel
-const uploadsPath = path.join(__dirname, '../uploads');
-app.use('/uploads', express.static(uploadsPath));
 
 try {
   if (!process.env.VERCEL) {
