@@ -65,7 +65,56 @@ export const createCompanyWithAdmin = async (req, res) => {
       });
     }
 
-    // Start transaction
+    // Get permissions BEFORE transaction to avoid timeout
+    let permissionsToAssign = [];
+
+    if (
+      permissions.includes('FULL_COMPANY_ACCESS') ||
+      permissions.includes('ALL_ACCESS')
+    ) {
+      // Get all permissions except system-level ones
+      permissionsToAssign = await prisma.permission.findMany({
+        where: {
+          OR: [
+            { category: { not: 'SYSTEM' } },
+            { code: 'FULL_COMPANY_ACCESS' },
+          ],
+        },
+      });
+    } else if (permissions.length > 0) {
+      // Get specific permissions
+      permissionsToAssign = await prisma.permission.findMany({
+        where: {
+          code: { in: permissions },
+        },
+      });
+    } else {
+      // Default permissions for company admin
+      permissionsToAssign = await prisma.permission.findMany({
+        where: {
+          module: {
+            in: [
+              'USER_MANAGEMENT',
+              'PROJECT_MANAGEMENT',
+              'ATTENDANCE_MANAGEMENT',
+              'TASK_MANAGEMENT',
+              'EXPENSE_MANAGEMENT',
+              'TRANSACTION_MANAGEMENT',
+              'MATERIAL_MANAGEMENT',
+              'CLIENT_MANAGEMENT',
+              'INVOICE_MANAGEMENT',
+              'DPR_MANAGEMENT',
+              'EQUIPMENT_MANAGEMENT',
+              'PAYROLL_MANAGEMENT',
+              'SETTINGS_MANAGEMENT',
+              'REPORTS',
+            ],
+          },
+        },
+      });
+    }
+
+    // Start transaction - optimized for speed
     const result = await prisma.$transaction(
       async (tx) => {
         // 1. Create Company
@@ -101,67 +150,19 @@ export const createCompanyWithAdmin = async (req, res) => {
           },
         });
 
-        // 4. Get permissions to assign
-        let permissionsToAssign = [];
-
-        if (
-          permissions.includes('FULL_COMPANY_ACCESS') ||
-          permissions.includes('ALL_ACCESS')
-        ) {
-          // Get all permissions except system-level ones
-          permissionsToAssign = await tx.permission.findMany({
-            where: {
-              OR: [
-                { category: { not: 'SYSTEM' } },
-                { code: 'FULL_COMPANY_ACCESS' },
-              ],
-            },
-          });
-        } else if (permissions.length > 0) {
-          // Get specific permissions
-          permissionsToAssign = await tx.permission.findMany({
-            where: {
-              code: { in: permissions },
-            },
-          });
-        } else {
-          // Default permissions for company admin
-          permissionsToAssign = await tx.permission.findMany({
-            where: {
-              module: {
-                in: [
-                  'USER_MANAGEMENT',
-                  'PROJECT_MANAGEMENT',
-                  'ATTENDANCE_MANAGEMENT',
-                  'TASK_MANAGEMENT',
-                  'EXPENSE_MANAGEMENT',
-                  'TRANSACTION_MANAGEMENT',
-                  'MATERIAL_MANAGEMENT',
-                  'CLIENT_MANAGEMENT',
-                  'INVOICE_MANAGEMENT',
-                  'DPR_MANAGEMENT',
-                  'EQUIPMENT_MANAGEMENT',
-                  'PAYROLL_MANAGEMENT',
-                  'SETTINGS_MANAGEMENT',
-                  'REPORTS',
-                ],
-              },
-            },
-          });
-        }
-
-        // 5. Assign permissions to role
-        for (const permission of permissionsToAssign) {
-          await tx.rolePermission.create({
-            data: {
+        // 4. Assign permissions to role (use batch create for speed)
+        if (permissionsToAssign.length > 0) {
+          await tx.rolePermission.createMany({
+            data: permissionsToAssign.map((permission) => ({
               roleId: companyAdminRole.id,
               permissionId: permission.id,
               grantedById: req.user.userId,
-            },
+            })),
+            skipDuplicates: true,
           });
         }
 
-        // 6. Create Company Admin User WITHOUT PASSWORD
+        // 5. Create Company Admin User WITHOUT PASSWORD
         const companyAdmin = await tx.user.create({
           data: {
             name: adminName,
@@ -187,10 +188,8 @@ export const createCompanyWithAdmin = async (req, res) => {
         };
       },
       {
-        // Increase the "wait time" for a database connection
-        maxWait: 10000, // 10 seconds
-        // Increase the "execution time" for the whole transaction
-        timeout: 25000, // 15 seconds (default is 5000ms)
+        maxWait: 15000, // 15 seconds wait
+        timeout: 30000, // 30 seconds execution
       }
     );
 
@@ -769,55 +768,56 @@ export const addCompanyAdmin = async (req, res) => {
       });
     }
 
-    // Start transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Create admin WITHOUT PASSWORD
-      const newAdmin = await tx.user.create({
-        data: {
-          name,
-          email,
-          phone,
-          password: '', // Empty password - will be set by user
-          userType: 'COMPANY_ADMIN',
-          companyId,
-          roleId: companyAdminRole.id,
-          designation: 'Company Administrator',
-          department: 'Administration',
-          employeeStatus: 'ACTIVE',
-          defaultLocation: 'OFFICE',
-          isActive: false, // Inactive until they set password
-          createdById: req.user.userId,
-        },
-      });
-
-      // 2. Assign permissions if specified
-      if (permissions.length > 0) {
-        const permissionsToAssign = await tx.permission.findMany({
+    // Get permissions BEFORE transaction
+    const permissionsToFetch = permissions.length > 0
+      ? await prisma.permission.findMany({
           where: {
             code: { in: permissions },
           },
+        })
+      : [];
+
+    // Start transaction - optimized
+    const result = await prisma.$transaction(
+      async (tx) => {
+        // 1. Create admin WITHOUT PASSWORD
+        const newAdmin = await tx.user.create({
+          data: {
+            name,
+            email,
+            phone,
+            password: '', // Empty password - will be set by user
+            userType: 'COMPANY_ADMIN',
+            companyId,
+            roleId: companyAdminRole.id,
+            designation: 'Company Administrator',
+            department: 'Administration',
+            employeeStatus: 'ACTIVE',
+            defaultLocation: 'OFFICE',
+            isActive: false, // Inactive until they set password
+            createdById: req.user.userId,
+          },
         });
 
-        for (const permission of permissionsToAssign) {
-          await tx.rolePermission.upsert({
-            where: {
-              roleId_permissionId: {
-                roleId: companyAdminRole.id,
-                permissionId: permission.id,
-              },
-            },
-            update: {},
-            create: {
+        // 2. Assign permissions if specified (batch create)
+        if (permissionsToFetch.length > 0) {
+          await tx.rolePermission.createMany({
+            data: permissionsToFetch.map((permission) => ({
               roleId: companyAdminRole.id,
               permissionId: permission.id,
               grantedById: req.user.userId,
-            },
+            })),
+            skipDuplicates: true,
           });
         }
-      }
 
-      return { newAdmin, permissionsAssigned: permissions.length };
-    });
+        return { newAdmin, permissionsAssigned: permissionsToFetch.length };
+      },
+      {
+        maxWait: 15000,
+        timeout: 30000,
+      }
+    );
 
     // Send welcome email
     if (email) {
@@ -940,7 +940,7 @@ export const updateAdminPermissions = async (req, res) => {
       });
     }
 
-    // Get permissions to assign
+    // Get permissions to assign BEFORE transaction
     let permissionsToAssign = [];
 
     if (
@@ -963,26 +963,33 @@ export const updateAdminPermissions = async (req, res) => {
       });
     }
 
-    // Start transaction
-    await prisma.$transaction(async (tx) => {
-      // Remove existing permissions
-      await tx.rolePermission.deleteMany({
-        where: {
-          roleId: admin.roleId,
-        },
-      });
-
-      // Add new permissions
-      for (const permission of permissionsToAssign) {
-        await tx.rolePermission.create({
-          data: {
+    // Start transaction - optimized
+    await prisma.$transaction(
+      async (tx) => {
+        // Remove existing permissions
+        await tx.rolePermission.deleteMany({
+          where: {
             roleId: admin.roleId,
-            permissionId: permission.id,
-            grantedById: req.user.userId,
           },
         });
+
+        // Add new permissions (batch create)
+        if (permissionsToAssign.length > 0) {
+          await tx.rolePermission.createMany({
+            data: permissionsToAssign.map((permission) => ({
+              roleId: admin.roleId,
+              permissionId: permission.id,
+              grantedById: req.user.userId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      },
+      {
+        maxWait: 15000,
+        timeout: 30000,
       }
-    });
+    );
 
     res.json({
       success: true,
