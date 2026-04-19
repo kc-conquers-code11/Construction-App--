@@ -101,11 +101,20 @@ const uploadsPath = path.join(__dirname, '../uploads');
 app.use('/uploads', express.static(uploadsPath));
 console.log('📁 Serving static files from:', uploadsPath);
 
-// Create uploads directory if it doesn't exist
-const fs = await import('fs');
-if (!fs.existsSync(uploadsPath)) {
-  fs.mkdirSync(uploadsPath, { recursive: true });
-  console.log('✅ Created uploads directory');
+// Create uploads directory only if not on Vercel
+const uploadsPath = path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadsPath));
+
+try {
+  if (!process.env.VERCEL) {
+    const fs = await import('fs');
+    if (!fs.existsSync(uploadsPath)) {
+      fs.mkdirSync(uploadsPath, { recursive: true });
+      console.log('✅ Created uploads directory');
+    }
+  }
+} catch (error) {
+  console.log('📁 Skipping local uploads directory creation');
 }
 
 // Health check
