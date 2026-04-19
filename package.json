@@ -13,7 +13,7 @@
     "format:check": "prettier --check .",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:migrate:deploy": "prisma db push --skip-generate",
     "seed": "node prisma/seed.js",
     "seed:permissions": "node prisma/seed-permissions.js",
     "db:setup": "npm run prisma:generate && npm run prisma:migrate && npm run seed",
