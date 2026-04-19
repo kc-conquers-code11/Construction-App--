@@ -114,17 +114,17 @@ export const login = async (req, res) => {
       lastLogin: user.lastLogin,
       company: user.company
         ? {
-            id: user.company.id,
-            name: user.company.name,
-            logo: user.company.logo,
-          }
+          id: user.company.id,
+          name: user.company.name,
+          logo: user.company.logo,
+        }
         : null,
       role: user.role
         ? {
-            id: user.role.id,
-            name: user.role.name,
-            permissions: permissions,
-          }
+          id: user.role.id,
+          name: user.role.name,
+          permissions: permissions,
+        }
         : null,
     };
 
@@ -144,6 +144,7 @@ export const login = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Internal server error',
+      error: error.message, // Temporary for debugging
     });
   }
 };
@@ -598,17 +599,17 @@ export const verifyOTPAndLogin = async (req, res) => {
       lastLogin: user.lastLogin,
       company: user.company
         ? {
-            id: user.company.id,
-            name: user.company.name,
-            logo: user.company.logo,
-          }
+          id: user.company.id,
+          name: user.company.name,
+          logo: user.company.logo,
+        }
         : null,
       role: user.role
         ? {
-            id: user.role.id,
-            name: user.role.name,
-            permissions: permissions,
-          }
+          id: user.role.id,
+          name: user.role.name,
+          permissions: permissions,
+        }
         : null,
     };
 
