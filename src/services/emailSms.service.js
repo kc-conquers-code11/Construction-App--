@@ -10,114 +10,60 @@ export const generateOTP = (length = 6) => {
   return otp;
 };
 
-// Serverless email fallback
-export const sendOTPViaServerless = async (email, otp, type = 'LOGIN') => {
-  try {
-    const apiUrl = process.env.SERVERLESS_EMAIL_API || 'http://localhost:3000/api/send-otp';
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, otp, type }),
-    });
+// Helper to get transporter
+const getTransporter = () => {
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('❌ Serverless email failed:', data);
-      return { success: false, error: data.error };
-    }
-
-    console.log('✅ OTP sent via serverless function');
-    return { success: true, messageId: data.messageId };
-  } catch (error) {
-    console.error('❌ Serverless function error:', error);
-    return { success: false, error: error.message };
+  if (!user || !pass) {
+    console.error('❌ SMTP_USER or SMTP_PASS missing in environment');
+    return null;
   }
+
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: user,
+      pass: pass,
+    },
+  });
 };
 
-// Create Gmail transporter
-let gmailTransporter = null;
-
-const getGmailTransporter = () => {
-  if (!gmailTransporter && process.env.SMTP_USER && process.env.SMTP_PASS) {
-    gmailTransporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: process.env.SMTP_PORT || 587,
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-    });
-  }
-  return gmailTransporter;
-};
-
-// Send Email OTP via Gmail
+// Send Email OTP
 export const sendEmailOTP = async (email, otp) => {
+  console.log(`📧 Attempting to send OTP to: ${email}`);
   try {
-    const transporter = getGmailTransporter();
+    const transporter = getTransporter();
 
     if (!transporter) {
-      console.error('❌ Gmail transporter not configured, using serverless fallback');
-      // Fallback to serverless function
-      return await sendOTPViaServerless(email, otp, 'LOGIN');
+      throw new Error('Email service not configured (Missing SMTP_USER/PASS)');
     }
 
     const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #2c3e50; margin-bottom: 10px;">🏗️ Construction App</h1>
-          <p style="color: #7f8c8d; font-size: 16px;">Your OTP for verification</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+        <h2 style="color: #2c3e50; text-align: center;">Construction App OTP</h2>
+        <p>Your verification code is:</p>
+        <div style="background: #f8f9fa; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #3498db; border-radius: 5px; margin: 20px 0;">
+          ${otp}
         </div>
-        
-        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; padding: 30px; border-radius: 10px; text-align: center; margin: 20px 0;">
-          <h2 style="color: #2c3e50; margin: 0; font-size: 48px; letter-spacing: 5px;">${otp}</h2>
-          <p style="color: #6c757d; margin-top: 10px;">Valid for 10 minutes</p>
-        </div>
-        
-        <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; margin: 20px 0;">
-          <p style="margin: 0; color: #856404; font-size: 14px;">
-            <strong>⚠️ Security Notice:</strong> Never share this OTP with anyone. 
-            Construction App will never ask for your OTP.
-          </p>
-        </div>
-        
-        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center;">
-          <p style="color: #6c757d; font-size: 12px; margin: 0;">
-            This is an automated message. Please do not reply.<br>
-            © ${new Date().getFullYear()} Neev Construction App
-          </p>
-        </div>
+        <p style="color: #7f8c8d; font-size: 14px;">This code is valid for 10 minutes. Do not share it with anyone.</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="text-align: center; color: #bdc3c7; font-size: 12px;">© ${new Date().getFullYear()} Construction App</p>
       </div>
     `;
 
     const info = await transporter.sendMail({
-      from:
-        process.env.EMAIL_FROM ||
-        '"Neev Construction" <neevconstructionapp@gmail.com>',
+      from: process.env.EMAIL_FROM || `"Construction App" <${process.env.SMTP_USER}>`,
       to: email,
-      subject: 'Your OTP Code - Neev Construction App',
+      subject: `Your OTP: ${otp}`,
       html,
     });
 
-    console.log(`✅ Gmail OTP sent to: ${email}`);
-
-    return {
-      success: true,
-      messageId: info.messageId,
-      otp: otp,
-    };
+    console.log('✅ Email sent: %s', info.messageId);
+    return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('❌ Gmail sending error:', error.message);
-    return {
-      success: false,
-      error: error.message,
-    };
+    console.error('❌ Email sending failed:', error.message);
+    return { success: false, error: error.message };
   }
 };
 
