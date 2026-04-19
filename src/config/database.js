@@ -11,10 +11,6 @@ if (!connectionString) {
   throw new Error('DATABASE_URL is not defined in environment variables');
 }
 
-// Log masked URL for debugging on Vercel
-const maskedUrl = connectionString.replace(/:([^:@]+)@/, ':****@');
-console.log(`🔌 Connecting to database with: ${maskedUrl}`);
-
 // Create Prisma client with native driver
 const prisma = new PrismaClient({
   log: ['error', 'warn'],
