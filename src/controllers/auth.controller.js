@@ -535,7 +535,8 @@ export const loginWithOTP = async (req, res) => {
       console.log('=========================================\n');
     }
 
-    res.json({
+    // Build response
+    const responseData = {
       success: true,
       message: `OTP sent to ${isEmail ? 'email' : 'phone'}`,
       data: {
@@ -543,9 +544,18 @@ export const loginWithOTP = async (req, res) => {
         expiresIn: '5 minutes',
         sentVia: isEmail ? 'email' : 'sms',
       },
-      // Only in development - REMOVE IN PRODUCTION
-      ...(process.env.NODE_ENV === 'development' && { otp: otpRecord.otp }),
-    });
+    };
+
+    // Always include OTP in development mode - frontend can show popup
+    if (process.env.NODE_ENV === 'development') {
+      responseData.debug = {
+        otp: otpRecord.otp,
+        note: 'This is for development/testing only. Remove in production.',
+        showInPopup: true,
+      };
+    }
+
+    res.json(responseData);
   } catch (error) {
     console.error('Login with OTP error:', error);
     res.status(500).json({

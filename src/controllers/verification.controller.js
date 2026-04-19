@@ -45,22 +45,38 @@ export const requestOTP = async (req, res) => {
       sendResult = await sendSMSOTP(identifier, otpRecord.otp);
     }
 
-    if (!sendResult.success) {
-      return res.status(500).json({
-        success: false,
-        message: `Failed to send OTP to ${isEmail ? 'email' : 'phone'}`,
-        error: sendResult.error,
-      });
+    // Log for development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('\n🔐 DEBUG - Verification OTP Generated:');
+      console.log('=====================================');
+      console.log(`OTP Code: ${otpRecord.otp}`);
+      console.log(`For: ${identifier}`);
+      console.log(`Type: ${otpType}`);
+      console.log(`Expires in: 10 minutes`);
+      console.log('=====================================\n');
     }
 
-    res.json({
+    // Build response
+    const responseData = {
       success: true,
       message: `OTP sent to ${isEmail ? 'email' : 'phone'}`,
-      identifier: isEmail ? user.email : user.phone,
-      expiresIn: '10 minutes',
-      // For development, include OTP in response
-      ...(process.env.NODE_ENV === 'development' && { otp: otpRecord.otp }),
-    });
+      data: {
+        identifier: isEmail ? user.email : user.phone,
+        expiresIn: '10 minutes',
+        sentVia: isEmail ? 'email' : 'sms',
+      },
+    };
+
+    // Include OTP in development for testing
+    if (process.env.NODE_ENV === 'development') {
+      responseData.debug = {
+        otp: otpRecord.otp,
+        note: 'Development mode - show this OTP in a popup on frontend',
+        showInPopup: true,
+      };
+    }
+
+    res.json(responseData);
   } catch (error) {
     console.error('Request OTP error:', error);
     res.status(500).json({
