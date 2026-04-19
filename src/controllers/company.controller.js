@@ -190,7 +190,7 @@ export const createCompanyWithAdmin = async (req, res) => {
         // Increase the "wait time" for a database connection
         maxWait: 10000, // 10 seconds
         // Increase the "execution time" for the whole transaction
-        timeout: 15000, // 15 seconds (default is 5000ms)
+        timeout: 25000, // 15 seconds (default is 5000ms)
       }
     );
 
