@@ -8,7 +8,7 @@ import {
   verifyOTP,
   markOTPAsUsed,
 } from '../services/otp.service.js';
-import { sendEmailOTP, sendSMSOTP, sendOTPViaServerless } from '../services/emailSms.service.js';
+import { sendEmailOTP, sendSMSOTP } from '../services/emailSms.service.js';
 
 // Helper to check for secrets
 const getSecret = (key) => {
@@ -114,17 +114,17 @@ export const login = async (req, res) => {
       lastLogin: user.lastLogin,
       company: user.company
         ? {
-          id: user.company.id,
-          name: user.company.name,
-          logo: user.company.logo,
-        }
+            id: user.company.id,
+            name: user.company.name,
+            logo: user.company.logo,
+          }
         : null,
       role: user.role
         ? {
-          id: user.role.id,
-          name: user.role.name,
-          permissions: permissions,
-        }
+            id: user.role.id,
+            name: user.role.name,
+            permissions: permissions,
+          }
         : null,
     };
 
@@ -502,68 +502,24 @@ export const loginWithOTP = async (req, res) => {
     // Create OTP
     const otpRecord = await createOTP(identifier, otpType, 5);
 
-    // Send OTP - prioritize serverless email function
-    let sendResult = { success: false };
-    
-    if (isEmail || user.email) {
-      // Send via serverless function (faster, no timeout issues)
-      console.log(`📧 Attempting serverless email to ${user.email || identifier}`);
-      sendResult = await sendOTPViaServerless(user.email || identifier, otpRecord.otp, 'LOGIN_OTP');
-      
-      if (sendResult.success) {
-        console.log(`✅ OTP sent via serverless email to ${user.email || identifier}`);
-      } else {
-        console.log(`⚠️ Serverless email failed, attempting SMS...`);
-        // Fallback to SMS if serverless fails
-        if (user.phone) {
-          sendResult = await sendSMSOTP(user.phone, otpRecord.otp);
-        }
-      }
-    } else if (user.phone) {
-      // Send via SMS
-      sendResult = await sendSMSOTP(user.phone, otpRecord.otp);
-      if (sendResult.success) {
-        console.log(`✅ OTP sent via SMS to ${user.phone}`);
-      }
+    // Send OTP
+    if (isEmail) {
+      await sendEmailOTP(identifier, otpRecord.otp);
+    } else {
+      await sendSMSOTP(identifier, otpRecord.otp);
     }
 
-    // Log OTP for development
-    if (process.env.NODE_ENV === 'development') {
-      console.log('\n🔐 DEBUG - OTP Generated (Development Only):');
-      console.log('=========================================');
-      console.log(`OTP Code: ${otpRecord.otp}`);
-      console.log(`For: ${identifier}`);
-      console.log(`Expires in: 5 minutes`);
-      console.log('=========================================\n');
-    }
-
-    // Build response
-    const responseData = {
+    res.json({
       success: true,
       message: `OTP sent to ${isEmail ? 'email' : 'phone'}`,
-      data: {
-        identifier,
-        expiresIn: '5 minutes',
-        sentVia: isEmail ? 'email' : 'sms',
-      },
-    };
-
-    // Always include OTP in development mode - frontend can show popup
-    if (process.env.NODE_ENV === 'development') {
-      responseData.debug = {
-        otp: otpRecord.otp,
-        note: 'This is for development/testing only. Remove in production.',
-        showInPopup: true,
-      };
-    }
-
-    res.json(responseData);
+      identifier,
+      expiresIn: '5 minutes',
+    });
   } catch (error) {
     console.error('Login with OTP error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to send OTP',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -642,17 +598,17 @@ export const verifyOTPAndLogin = async (req, res) => {
       lastLogin: user.lastLogin,
       company: user.company
         ? {
-          id: user.company.id,
-          name: user.company.name,
-          logo: user.company.logo,
-        }
+            id: user.company.id,
+            name: user.company.name,
+            logo: user.company.logo,
+          }
         : null,
       role: user.role
         ? {
-          id: user.role.id,
-          name: user.role.name,
-          permissions: permissions,
-        }
+            id: user.role.id,
+            name: user.role.name,
+            permissions: permissions,
+          }
         : null,
     };
 

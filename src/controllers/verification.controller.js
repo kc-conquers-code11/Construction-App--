@@ -6,7 +6,7 @@ import {
   verifyOTP,
   markOTPAsUsed,
 } from '../services/otp.service.js';
-import { sendEmailOTP, sendSMSOTP, sendOTPViaServerless } from '../services/emailSms.service.js';
+import { sendEmailOTP, sendSMSOTP } from '../services/emailSms.service.js';
 
 // Request OTP for email/phone verification
 export const requestOTP = async (req, res) => {
@@ -40,44 +40,27 @@ export const requestOTP = async (req, res) => {
     // Send OTP
     let sendResult;
     if (isEmail) {
-      // Use serverless email function for faster delivery
-      sendResult = await sendOTPViaServerless(identifier, otpRecord.otp, otpType);
+      sendResult = await sendEmailOTP(identifier, otpRecord.otp);
     } else {
       sendResult = await sendSMSOTP(identifier, otpRecord.otp);
     }
 
-    // Log for development
-    if (process.env.NODE_ENV === 'development') {
-      console.log('\n🔐 DEBUG - Verification OTP Generated:');
-      console.log('=====================================');
-      console.log(`OTP Code: ${otpRecord.otp}`);
-      console.log(`For: ${identifier}`);
-      console.log(`Type: ${otpType}`);
-      console.log(`Expires in: 10 minutes`);
-      console.log('=====================================\n');
+    if (!sendResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: `Failed to send OTP to ${isEmail ? 'email' : 'phone'}`,
+        error: sendResult.error,
+      });
     }
 
-    // Build response
-    const responseData = {
+    res.json({
       success: true,
       message: `OTP sent to ${isEmail ? 'email' : 'phone'}`,
-      data: {
-        identifier: isEmail ? user.email : user.phone,
-        expiresIn: '10 minutes',
-        sentVia: isEmail ? 'email' : 'sms',
-      },
-    };
-
-    // Include OTP in development for testing
-    if (process.env.NODE_ENV === 'development') {
-      responseData.debug = {
-        otp: otpRecord.otp,
-        note: 'Development mode - show this OTP in a popup on frontend',
-        showInPopup: true,
-      };
-    }
-
-    res.json(responseData);
+      identifier: isEmail ? user.email : user.phone,
+      expiresIn: '10 minutes',
+      // For development, include OTP in response
+      ...(process.env.NODE_ENV === 'development' && { otp: otpRecord.otp }),
+    });
   } catch (error) {
     console.error('Request OTP error:', error);
     res.status(500).json({
