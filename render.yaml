@@ -3,7 +3,7 @@ services:
     name: construction-api
     env: node
     plan: free
-    buildCommand: npm ci && npm run prisma:generate && npm run prisma:migrate:deploy
+    buildCommand: npm install && npm run prisma:generate && npm run prisma:migrate:deploy
     startCommand: npm start
     envVars:
       - key: NODE_ENV
