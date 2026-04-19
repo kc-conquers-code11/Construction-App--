@@ -223,6 +223,9 @@ const gracefulShutdown = async () => {
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
-startServer();
+// Only start the server if we're not running on Vercel
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  startServer();
+}
 
 export default app;
